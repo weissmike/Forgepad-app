@@ -43,7 +43,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     
     if (isValid) {
       setValidated(prev => ({ ...prev, [provider]: true }));
-      storage.saveCredentials({ [`${provider}Key`]: key });
+      storage.saveProviderApiKey(provider, key);
     } else {
       setError(`Invalid API key for ${provider}. Please check and try again.`);
     }
@@ -202,7 +202,7 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
               <button
                 onClick={() => {
                   if (step === 4) {
-                    storage.saveCredentials({ onboardingComplete: true });
+                    storage.savePreferences({ onboardingComplete: true });
                     onComplete();
                   } else {
                     if (step === 2 && !canProceed) {

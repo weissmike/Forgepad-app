@@ -7,16 +7,27 @@ interface SecretPayload {
   githubToken?: string;
 }
 
-export interface GithubAccount {
-  id: string;
-  login: string;
-  name: string;
-  avatarUrl?: string;
+export interface OnboardingVerificationStep {
+  verified: boolean;
+  verifiedAt: string | null;
+  error: string | null;
+}
+
+export interface OnboardingStatus {
+  providerValidation: OnboardingVerificationStep;
+  githubConnection: OnboardingVerificationStep;
+  githubTokenVerification: OnboardingVerificationStep;
+  secureStorageConsent: OnboardingVerificationStep;
+  localBuildsEnabled: boolean;
+  sdkPathVerification: OnboardingVerificationStep;
+  fullyValidated: boolean;
+  updatedAt: string | null;
 }
 
 export interface StoragePreferences {
   defaultProvider: AIProvider;
   onboardingComplete: boolean;
+  onboardingStatus: OnboardingStatus;
   providerFallbackEnabled: boolean;
   prDraftingEnabled: boolean;
   ciPollingEnabled: boolean;
@@ -46,6 +57,16 @@ const SECRET_STORAGE_KEY = 'forgepad_secure';
 const DEFAULT_PREFS: StoragePreferences = {
   defaultProvider: 'gemini',
   onboardingComplete: false,
+  onboardingStatus: {
+    providerValidation: { verified: false, verifiedAt: null, error: null },
+    githubConnection: { verified: false, verifiedAt: null, error: null },
+    githubTokenVerification: { verified: false, verifiedAt: null, error: null },
+    secureStorageConsent: { verified: false, verifiedAt: null, error: null },
+    localBuildsEnabled: false,
+    sdkPathVerification: { verified: false, verifiedAt: null, error: null },
+    fullyValidated: false,
+    updatedAt: null,
+  },
   providerFallbackEnabled: true,
   prDraftingEnabled: true,
   ciPollingEnabled: true,
@@ -105,6 +126,10 @@ const readPrefs = (): StoragePreferences => {
   return {
     defaultProvider: parsed.defaultProvider ?? DEFAULT_PREFS.defaultProvider,
     onboardingComplete: parsed.onboardingComplete ?? DEFAULT_PREFS.onboardingComplete,
+    onboardingStatus: {
+      ...DEFAULT_PREFS.onboardingStatus,
+      ...parsed.onboardingStatus,
+    },
     providerFallbackEnabled:
       parsed.providerFallbackEnabled ??
       // legacy key

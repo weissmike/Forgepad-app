@@ -9,8 +9,8 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
-    const creds = storage.getCredentials();
-    setOnboardingComplete(creds.onboardingComplete);
+    const prefs = storage.getPreferences();
+    setOnboardingComplete(Boolean(prefs.onboardingStatus?.fullyValidated));
   }, []);
 
   if (onboardingComplete === null) return null;

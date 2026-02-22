@@ -1,6 +1,14 @@
 export type AIProvider = 'openai' | 'anthropic' | 'gemini';
+export type ProviderHealthState = 'healthy' | 'degraded' | 'error' | 'unknown' | 'unconfigured';
 
 type SecretStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+export interface GithubAccount {
+  id?: string | number;
+  login: string;
+  name?: string;
+  avatarUrl?: string;
+}
 
 interface SecretPayload {
   providerKeys: Partial<Record<AIProvider, string>>;
@@ -26,6 +34,7 @@ export interface OnboardingStatus {
 
 export interface StoragePreferences {
   defaultProvider: AIProvider;
+  providerHealth: Record<AIProvider, ProviderHealthState>;
   onboardingComplete: boolean;
   onboardingStatus: OnboardingStatus;
   providerFallbackEnabled: boolean;
@@ -56,6 +65,11 @@ const PREFS_STORAGE_KEY = 'forgepad_prefs';
 const SECRET_STORAGE_KEY = 'forgepad_secure';
 const DEFAULT_PREFS: StoragePreferences = {
   defaultProvider: 'gemini',
+  providerHealth: {
+    gemini: 'unknown',
+    openai: 'unconfigured',
+    anthropic: 'unconfigured',
+  },
   onboardingComplete: false,
   onboardingStatus: {
     providerValidation: { verified: false, verifiedAt: null, error: null },
@@ -125,6 +139,10 @@ const readPrefs = (): StoragePreferences => {
 
   return {
     defaultProvider: parsed.defaultProvider ?? DEFAULT_PREFS.defaultProvider,
+    providerHealth: {
+      ...DEFAULT_PREFS.providerHealth,
+      ...parsed.providerHealth,
+    },
     onboardingComplete: parsed.onboardingComplete ?? DEFAULT_PREFS.onboardingComplete,
     onboardingStatus: {
       ...DEFAULT_PREFS.onboardingStatus,
@@ -228,6 +246,16 @@ export const storage = {
     return buildCredentialsView();
   },
 
+  saveProviderHealth: (provider: AIProvider, health: ProviderHealthState) => {
+    const prefs = readPrefs();
+    return savePrefs({
+      providerHealth: {
+        ...prefs.providerHealth,
+        [provider]: health,
+      },
+    });
+  },
+
   saveProviderApiKey: (provider: AIProvider, key: string) => {
     const current = readSecrets();
     writeSecrets({
@@ -235,6 +263,12 @@ export const storage = {
       providerKeys: {
         ...current.providerKeys,
         [provider]: key,
+      },
+    });
+    savePrefs({
+      providerHealth: {
+        ...readPrefs().providerHealth,
+        [provider]: 'healthy',
       },
     });
     return buildCredentialsView();
@@ -245,6 +279,12 @@ export const storage = {
     const nextProviderKeys = { ...current.providerKeys };
     delete nextProviderKeys[provider];
     writeSecrets({ ...current, providerKeys: nextProviderKeys });
+    savePrefs({
+      providerHealth: {
+        ...readPrefs().providerHealth,
+        [provider]: 'unconfigured',
+      },
+    });
     return buildCredentialsView();
   },
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import {
   X,
@@ -14,9 +14,10 @@ import {
   Terminal,
   Loader2,
 } from 'lucide-react';
-import { storage, Credentials, AIProvider, StoragePreferences } from '../../services/storage';
+import { storage, AIProvider, StoragePreferences } from '../../services/storage';
 import { AIService } from '../../services/ai';
 import { cn } from '../../lib/utils';
+import { useRuntimeSession } from '../../state/runtimeSession';
 
 interface SettingsProps {
   onClose: () => void;
@@ -25,8 +26,8 @@ interface SettingsProps {
 const providers: AIProvider[] = ['gemini', 'openai', 'anthropic'];
 
 export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
-  const [creds, setCreds] = useState<Credentials>(storage.getCredentials());
-  const [prefs, setPrefs] = useState<StoragePreferences>(storage.getPreferences());
+  const { credentials: creds, preferences: sharedPrefs, providerHealth, refresh } = useRuntimeSession();
+  const [prefs, setPrefs] = useState<StoragePreferences>(sharedPrefs);
   const [activeSection, setActiveSection] = useState<'ai' | 'github' | 'build' | 'security'>('ai');
   const [providerInputs, setProviderInputs] = useState<Record<AIProvider, string>>({
     gemini: '',
@@ -44,9 +45,12 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
     anthropic: false,
   });
 
+  useEffect(() => {
+    setPrefs(sharedPrefs);
+  }, [sharedPrefs]);
+
   const updatePrefs = (updates: Partial<StoragePreferences>) => {
-    const nextCreds = storage.savePreferences(updates);
-    setCreds(nextCreds);
+    storage.savePreferences(updates);
     setPrefs(storage.getPreferences());
   };
 
@@ -67,8 +71,8 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
       return;
     }
 
-    const nextCreds = storage.saveProviderApiKey(provider, key);
-    setCreds(nextCreds);
+    storage.saveProviderApiKey(provider, key);
+    refresh();
     setProviderInputs((prev) => ({ ...prev, [provider]: '' }));
     setProviderStatus((prev) => ({
       ...prev,
@@ -78,8 +82,8 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
   };
 
   const clearProviderKey = (provider: AIProvider) => {
-    const nextCreds = storage.removeProviderApiKey(provider);
-    setCreds(nextCreds);
+    storage.removeProviderApiKey(provider);
+    refresh();
     setProviderInputs((prev) => ({ ...prev, [provider]: '' }));
     setProviderStatus((prev) => ({ ...prev, [provider]: 'Key cleared.' }));
   };
@@ -189,11 +193,12 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
                 <div className="grid gap-6">
                   {providers.map((provider) => {
                     const configured = creds.providers[provider].configured;
+                    const healthLabel = configured ? providerHealth[provider] : 'unconfigured';
 
                     return (
                       <div key={provider} className="space-y-3">
                         <div className="flex items-center justify-between">
-                          <label className="text-sm font-bold capitalize">{provider}</label>
+                          <label className="text-sm font-bold capitalize">{provider} <span className="text-xs text-forge-muted">({healthLabel})</span></label>
                           <input
                             type="radio"
                             name="defaultProvider"
@@ -289,7 +294,7 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
                   </div>
                   {creds.github.configured && (
                     <button
-                      onClick={() => setCreds(storage.removeGithubToken())}
+                      onClick={() => { storage.removeGithubToken(); refresh(); }}
                       className="px-4 py-2 bg-red-500/10 text-red-500 rounded-xl text-sm font-bold hover:bg-red-500/20 transition-all"
                     >
                       Disconnect

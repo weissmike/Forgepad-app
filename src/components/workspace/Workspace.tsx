@@ -18,13 +18,16 @@ import {
   History
 } from 'lucide-react';
 import Markdown from 'react-markdown';
-import { storage, Credentials, AIProvider } from '../../services/storage';
+import { AIProvider } from '../../services/storage';
 import { AIService, Message } from '../../services/ai';
 import { cn } from '../../lib/utils';
+import { useRuntimeSession } from '../../state/runtimeSession';
 
 interface WorkspaceProps {
   onOpenSettings: () => void;
 }
+
+const providers: AIProvider[] = ['gemini', 'openai', 'anthropic'];
 
 export const Workspace: React.FC<WorkspaceProps> = ({ onOpenSettings }) => {
   const [chatHeight, setChatHeight] = useState(300);
@@ -34,22 +37,15 @@ export const Workspace: React.FC<WorkspaceProps> = ({ onOpenSettings }) => {
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [creds, setCreds] = useState<Credentials>(storage.getCredentials());
-  const [activeProvider, setActiveProvider] = useState<AIProvider>(storage.getPreferences().defaultProvider);
-  const [providerStatus, setProviderStatus] = useState<string>('Ready');
+  const { activeProvider, providerNotice, setProviderNotice, providerHealth, setActiveProvider, preferences } = useRuntimeSession();
   const [activeTab, setActiveTab] = useState<'editor' | 'preview' | 'terminal'>('editor');
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
 
   useEffect(() => {
-    const unsubscribe = storage.onPreferencesChanged((prefs) => {
-      setCreds(storage.getCredentials());
-      setActiveProvider(prefs.defaultProvider);
-      setProviderStatus(`Manual switch to ${prefs.defaultProvider}`);
-    });
-    return unsubscribe;
-  }, []);
+    setProviderNotice(`Default provider: ${preferences.defaultProvider}`);
+  }, [preferences.defaultProvider, setProviderNotice]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -62,21 +58,20 @@ export const Workspace: React.FC<WorkspaceProps> = ({ onOpenSettings }) => {
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsTyping(true);
-    setProviderStatus(`Sending with ${activeProvider}`);
+    setProviderNotice(`Sending with ${activeProvider}`);
 
     try {
       const response = await AIService.getInstance().sendMessage([...messages, userMsg], {
+        provider: activeProvider,
         onProviderSwitch: ({ to, from, reason }) => {
-          setActiveProvider(to);
-          setProviderStatus(`Fallback ${from} → ${to} (${reason})`);
+          setProviderNotice(`Fallback ${from} → ${to} (${reason})`);
         },
       });
 
-      setActiveProvider(response.provider);
-      setProviderStatus(response.fallbackUsed ? `Responded via fallback: ${response.provider}` : `Responded via ${response.provider}`);
+      setProviderNotice(response.fallbackUsed ? `Responded via fallback: ${response.provider}` : `Responded via ${response.provider}`);
       setMessages(prev => [...prev, { role: 'assistant', content: response.text || 'No response' }]);
     } catch (error: any) {
-      setProviderStatus('Provider error');
+      setProviderNotice('Provider error');
       setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${error.message}` }]);
     } finally {
       setIsTyping(false);
@@ -116,10 +111,19 @@ export const Workspace: React.FC<WorkspaceProps> = ({ onOpenSettings }) => {
             <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
             <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500">{activeProvider}</span>
           </div>
-          <span className="text-xs text-forge-muted">{providerStatus}</span>
+          <span className="text-xs text-forge-muted">{providerNotice}</span>
         </div>
 
         <div className="flex items-center gap-2">
+          <select
+            value={activeProvider}
+            onChange={(e) => setActiveProvider(e.target.value as AIProvider)}
+            className="text-xs bg-forge-card border border-forge-border rounded-lg px-2 py-1"
+          >
+            {providers.map((provider) => (
+              <option key={provider} value={provider}>{provider}</option>
+            ))}
+          </select>
           <button className="p-2 hover:bg-white/5 rounded-lg transition-colors text-forge-muted">
             <Github className="w-5 h-5" />
           </button>
@@ -143,6 +147,7 @@ export const Workspace: React.FC<WorkspaceProps> = ({ onOpenSettings }) => {
           <button onClick={() => setActiveTab('terminal')} className={cn("flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-medium transition-all", activeTab === 'terminal' ? "bg-white/10 text-white" : "text-forge-muted hover:text-white")}>
             <Terminal className="w-4 h-4" />Terminal
           </button>
+          <span className="ml-auto text-xs text-forge-muted">Health: {providerHealth[activeProvider]}</span>
         </div>
 
         <div className="flex-1 bg-forge-bg relative overflow-hidden">

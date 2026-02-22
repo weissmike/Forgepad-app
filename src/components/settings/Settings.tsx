@@ -12,8 +12,6 @@ import {
   ChevronRight,
   AlertTriangle,
   Lock,
-  Eye,
-  EyeOff,
   Terminal
 } from 'lucide-react';
 import { storage, Credentials, AIProvider } from '../../services/storage';
@@ -25,16 +23,11 @@ interface SettingsProps {
 
 export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
   const [creds, setCreds] = useState<Credentials>(storage.getCredentials());
-  const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [activeSection, setActiveSection] = useState<'ai' | 'github' | 'build' | 'security'>('ai');
 
-  const toggleKeyVisibility = (key: string) => {
-    setShowKeys(prev => ({ ...prev, [key]: !prev[key] }));
-  };
-
-  const updateCreds = (updates: Partial<Credentials>) => {
-    const newCreds = storage.saveCredentials(updates);
-    setCreds(newCreds);
+  const updateDefaultProvider = (provider: AIProvider) => {
+    const nextCreds = storage.savePreferences({ defaultProvider: provider });
+    setCreds(nextCreds);
   };
 
   const sections = [
@@ -114,24 +107,18 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
                             type="radio" 
                             name="defaultProvider"
                             checked={creds.defaultProvider === provider}
-                            onChange={() => updateCreds({ defaultProvider: provider })}
+                            onChange={() => updateDefaultProvider(provider)}
                             className="w-4 h-4 accent-blue-500"
                           />
                         </div>
                       </div>
-                      <div className="relative">
-                        <input
-                          type={showKeys[provider] ? "text" : "password"}
-                          value={(creds[`${provider}Key` as keyof Credentials] as string) || ''}
-                          readOnly
-                          className="w-full bg-forge-card border border-forge-border rounded-xl px-4 py-3 text-sm text-forge-muted pr-12"
-                        />
-                        <button 
-                          onClick={() => toggleKeyVisibility(provider)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 hover:bg-white/5 rounded-lg transition-colors text-forge-muted"
-                        >
-                          {showKeys[provider] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
+                      <div className="space-y-2">
+                        <div className="w-full bg-forge-card border border-forge-border rounded-xl px-4 py-3 text-sm text-forge-muted">
+                          {creds.providers[provider].masked}
+                        </div>
+                        <p className="text-xs text-forge-muted">
+                          {creds.providers[provider].configured ? 'Configured in secure storage.' : 'No key stored for this provider.'}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -163,13 +150,15 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
                       <Github className="w-6 h-6 text-black" />
                     </div>
                     <div>
-                      <h4 className="font-bold">Connected Account</h4>
-                      <p className="text-sm text-forge-muted">@forgepad-user</p>
+                      <h4 className="font-bold">{creds.github.configured ? 'Connected Account' : 'GitHub Not Connected'}</h4>
+                      <p className="text-sm text-forge-muted">{creds.github.masked}</p>
                     </div>
                   </div>
+                  {creds.github.configured && (
                   <button className="px-4 py-2 bg-red-500/10 text-red-500 rounded-xl text-sm font-bold hover:bg-red-500/20 transition-all">
                     Disconnect
                   </button>
+                  )}
                 </div>
 
                 <div className="space-y-4">

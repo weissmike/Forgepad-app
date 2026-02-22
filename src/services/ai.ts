@@ -8,7 +8,7 @@ export interface Message {
 
 export class AIService {
   private static instance: AIService;
-  
+
   private constructor() {}
 
   static getInstance() {
@@ -19,54 +19,60 @@ export class AIService {
   }
 
   async sendMessage(messages: Message[], provider?: AIProvider) {
-    const creds = storage.getCredentials();
-    const activeProvider = provider || creds.defaultProvider;
+    const prefs = storage.getPreferences();
+    const activeProvider = provider || prefs.defaultProvider;
 
     if (activeProvider === 'gemini') {
       return this.callGemini(messages);
-    } else if (activeProvider === 'openai') {
-      return this.callOpenAI(messages, creds.openaiKey);
-    } else if (activeProvider === 'anthropic') {
-      return this.callAnthropic(messages, creds.anthropicKey);
     }
-    
+
+    if (activeProvider === 'openai') {
+      return storage.withProviderApiKey('openai', (key) => this.callOpenAI(messages, key));
+    }
+
+    if (activeProvider === 'anthropic') {
+      return storage.withProviderApiKey('anthropic', (key) => this.callAnthropic(messages, key));
+    }
+
     throw new Error(`Provider ${activeProvider} not implemented or configured.`);
   }
 
   private async callGemini(messages: Message[]) {
-    // Use the platform provided key if available, otherwise fallback to user provided
-    const apiKey = process.env.GEMINI_API_KEY || storage.getCredentials().geminiKey;
-    if (!apiKey) throw new Error("Gemini API Key missing");
+    const envKey = process.env.GEMINI_API_KEY;
 
-    const ai = new GoogleGenAI({ apiKey });
-    const model = ai.models.generateContent({
-      model: "gemini-2.0-flash-exp", // Using a stable flash model
-      contents: messages.map(m => ({
-        role: m.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: m.content }]
-      })),
-    });
+    const invokeGemini = async (apiKey: string) => {
+      const ai = new GoogleGenAI({ apiKey });
+      const model = ai.models.generateContent({
+        model: "gemini-2.0-flash-exp",
+        contents: messages.map((m) => ({
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts: [{ text: m.content }],
+        })),
+      });
 
-    const response = await model;
-    return response.text;
+      const response = await model;
+      return response.text;
+    };
+
+    if (envKey) {
+      return invokeGemini(envKey);
+    }
+
+    return storage.withProviderApiKey('gemini', invokeGemini);
   }
 
-  private async callOpenAI(messages: Message[], key?: string) {
+  private async callOpenAI(messages: Message[], key: string) {
     if (!key) throw new Error("OpenAI API Key missing");
-    // Mocking OpenAI call for demo purposes as we don't have the SDK installed
-    // In a real app, we'd use the openai package
     return "OpenAI response (Mocked): ForgePad is ready to build.";
   }
 
-  private async callAnthropic(messages: Message[], key?: string) {
+  private async callAnthropic(messages: Message[], key: string) {
     if (!key) throw new Error("Anthropic API Key missing");
-    // Mocking Anthropic call
     return "Claude response (Mocked): I can help you with your code.";
   }
 
   async validateKey(provider: AIProvider, key: string): Promise<boolean> {
     if (!key) return false;
-    // Simple validation logic
     if (provider === 'gemini') {
       try {
         const ai = new GoogleGenAI({ apiKey: key });
@@ -79,7 +85,6 @@ export class AIService {
         return false;
       }
     }
-    // For others, we just check length for now in this demo
     return key.length > 20;
   }
 }

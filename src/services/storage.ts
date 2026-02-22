@@ -10,6 +10,7 @@ interface SecretPayload {
 export interface StoragePreferences {
   defaultProvider: AIProvider;
   onboardingComplete: boolean;
+  fallbackEnabled: boolean;
 }
 
 export interface Credentials {
@@ -24,7 +25,10 @@ const SECRET_STORAGE_KEY = 'forgepad_secure';
 const DEFAULT_PREFS: StoragePreferences = {
   defaultProvider: 'gemini',
   onboardingComplete: false,
+  fallbackEnabled: true,
 };
+
+const PREFS_CHANGED_EVENT = 'forgepad:prefs-changed';
 
 const providerMaskPrefix: Record<AIProvider, string> = {
   gemini: 'GEM',
@@ -73,6 +77,7 @@ const readPrefs = (): StoragePreferences => {
   return {
     defaultProvider: parsed.defaultProvider ?? DEFAULT_PREFS.defaultProvider,
     onboardingComplete: parsed.onboardingComplete ?? DEFAULT_PREFS.onboardingComplete,
+    fallbackEnabled: parsed.fallbackEnabled ?? DEFAULT_PREFS.fallbackEnabled,
   };
 };
 
@@ -81,6 +86,7 @@ const savePrefs = (updates: Partial<StoragePreferences>) => {
 
   const next = { ...readPrefs(), ...updates };
   window.localStorage.setItem(PREFS_STORAGE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: next }));
   return next;
 };
 
@@ -139,6 +145,18 @@ export const storage = {
 
   getPreferences: (): StoragePreferences => readPrefs(),
 
+  onPreferencesChanged: (listener: (prefs: StoragePreferences) => void) => {
+    if (typeof window === 'undefined') return () => {};
+
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<StoragePreferences>).detail;
+      listener(detail ?? readPrefs());
+    };
+
+    window.addEventListener(PREFS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(PREFS_CHANGED_EVENT, handler);
+  },
+
   savePreferences: (updates: Partial<StoragePreferences>) => {
     savePrefs(updates);
     return buildCredentialsView();
@@ -168,6 +186,16 @@ export const storage = {
     const key = readSecrets().providerKeys[provider];
     if (!key) throw new Error(`${provider} API Key missing`);
     return fn(key);
+  },
+
+  getConfiguredProviders: (): AIProvider[] => {
+    const secrets = readSecrets();
+    return (['gemini', 'openai', 'anthropic'] as AIProvider[]).filter((provider) => {
+      if (provider === 'gemini' && typeof process !== 'undefined' && process.env.GEMINI_API_KEY) {
+        return true;
+      }
+      return Boolean(secrets.providerKeys[provider]);
+    });
   },
 
   saveGithubToken: (token: string) => {

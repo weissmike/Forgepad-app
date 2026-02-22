@@ -23,11 +23,19 @@ interface SettingsProps {
 
 export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
   const [creds, setCreds] = useState<Credentials>(storage.getCredentials());
+  const [fallbackEnabled, setFallbackEnabled] = useState(storage.getPreferences().fallbackEnabled);
   const [activeSection, setActiveSection] = useState<'ai' | 'github' | 'build' | 'security'>('ai');
 
   const updateDefaultProvider = (provider: AIProvider) => {
     const nextCreds = storage.savePreferences({ defaultProvider: provider });
     setCreds(nextCreds);
+  };
+
+  const toggleFallback = () => {
+    const next = !fallbackEnabled;
+    storage.savePreferences({ fallbackEnabled: next });
+    setFallbackEnabled(next);
+    setCreds(storage.getCredentials());
   };
 
   const sections = [
@@ -129,8 +137,19 @@ export const Settings: React.FC<SettingsProps> = ({ onClose }) => {
                     <Check className="w-4 h-4 text-blue-500" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold mb-1">Automatic Fallback</h4>
-                    <p className="text-xs text-forge-muted mb-3">If your primary provider fails, ForgePad will automatically switch to the next available one.</p>
+                    <h4 className="text-sm font-bold mb-1">Automatic Fallback Routing</h4>
+                    <p className="text-xs text-forge-muted mb-3">If your primary provider fails, ForgePad will switch to the next configured healthy provider and publish the switch event to the workspace status.</p>
+                    <button
+                      onClick={toggleFallback}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-bold border transition-all",
+                        fallbackEnabled
+                          ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                          : "bg-zinc-500/10 text-zinc-400 border-zinc-500/20"
+                      )}
+                    >
+                      {fallbackEnabled ? 'Fallback enabled' : 'Fallback disabled'}
+                    </button>
                     <div className="flex items-center gap-2">
                       <div className="w-10 h-5 bg-blue-500 rounded-full relative cursor-pointer">
                         <div className="absolute right-1 top-1 w-3 h-3 bg-white rounded-full" />

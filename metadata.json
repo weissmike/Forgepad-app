@@ -1,0 +1,9 @@
+{
+  "name": "ForgePad",
+  "description": "Android-native AI development studio with multi-provider agent support and secure credential management.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

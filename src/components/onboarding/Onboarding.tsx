@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shield, Key, Github, CheckCircle2, ArrowRight, Loader2, AlertCircle, Cpu } from 'lucide-react';
 import { storage, AIProvider } from '../../services/storage';
@@ -27,6 +27,26 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
     gemini: false,
     github: false
   });
+
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('github_token');
+    const login = params.get('github_login');
+    const id = params.get('github_id');
+
+    if (!token || !login || !id) return;
+
+    storage.saveGithubOAuth(token, {
+      id,
+      login,
+      name: params.get('github_name') ?? login,
+      avatarUrl: params.get('github_avatar') ?? undefined,
+    });
+    setValidated((prev) => ({ ...prev, github: true }));
+  }, []);
 
   const handleValidate = async (provider: AIProvider) => {
     setLoading(true);
@@ -164,15 +184,22 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
               {step === 3 && (
                 <div className="space-y-4">
-                  <button 
-                    onClick={() => setValidated(v => ({ ...v, github: true }))}
+                  <button
+                    onClick={() => {
+                      storage.saveGithubOAuth('demo-oauth-token', {
+                        id: 'local-dev',
+                        login: 'forgepad-dev',
+                        name: 'ForgePad Developer',
+                      });
+                      setValidated(v => ({ ...v, github: true }));
+                    }}
                     className="w-full flex items-center justify-center gap-3 bg-white text-black font-bold py-4 rounded-2xl hover:bg-zinc-200 transition-all"
                   >
                     <Github className="w-5 h-5" />
                     Connect with GitHub
                   </button>
                   <p className="text-xs text-center text-forge-muted">
-                    OAuth tokens are stored encrypted in the Android Keystore.
+                    OAuth state is read from callback query params when available and stored securely.
                   </p>
                 </div>
               )}

@@ -7,17 +7,38 @@ interface SecretPayload {
   githubToken?: string;
 }
 
+export interface GithubAccount {
+  id: string;
+  login: string;
+  name: string;
+  avatarUrl?: string;
+}
+
 export interface StoragePreferences {
   defaultProvider: AIProvider;
   onboardingComplete: boolean;
-  fallbackEnabled: boolean;
+  providerFallbackEnabled: boolean;
+  prDraftingEnabled: boolean;
+  ciPollingEnabled: boolean;
+  localBuildMode: boolean;
+  cloudFallbackEnabled: boolean;
+  safeMode: boolean;
+  biometricProtectionEnabled: boolean;
+  githubAccount: GithubAccount | null;
 }
 
 export interface Credentials {
   defaultProvider: AIProvider;
   onboardingComplete: boolean;
+  providerFallbackEnabled: boolean;
+  prDraftingEnabled: boolean;
+  ciPollingEnabled: boolean;
+  localBuildMode: boolean;
+  cloudFallbackEnabled: boolean;
+  safeMode: boolean;
+  biometricProtectionEnabled: boolean;
   providers: Record<AIProvider, { configured: boolean; masked: string }>;
-  github: { configured: boolean; masked: string };
+  github: { configured: boolean; masked: string; account: GithubAccount | null };
 }
 
 const PREFS_STORAGE_KEY = 'forgepad_prefs';
@@ -25,7 +46,14 @@ const SECRET_STORAGE_KEY = 'forgepad_secure';
 const DEFAULT_PREFS: StoragePreferences = {
   defaultProvider: 'gemini',
   onboardingComplete: false,
-  fallbackEnabled: true,
+  providerFallbackEnabled: true,
+  prDraftingEnabled: true,
+  ciPollingEnabled: true,
+  localBuildMode: false,
+  cloudFallbackEnabled: true,
+  safeMode: true,
+  biometricProtectionEnabled: false,
+  githubAccount: null,
 };
 
 const PREFS_CHANGED_EVENT = 'forgepad:prefs-changed';
@@ -77,7 +105,19 @@ const readPrefs = (): StoragePreferences => {
   return {
     defaultProvider: parsed.defaultProvider ?? DEFAULT_PREFS.defaultProvider,
     onboardingComplete: parsed.onboardingComplete ?? DEFAULT_PREFS.onboardingComplete,
-    fallbackEnabled: parsed.fallbackEnabled ?? DEFAULT_PREFS.fallbackEnabled,
+    providerFallbackEnabled:
+      parsed.providerFallbackEnabled ??
+      // legacy key
+      (parsed as Partial<{ fallbackEnabled: boolean }>).fallbackEnabled ??
+      DEFAULT_PREFS.providerFallbackEnabled,
+    prDraftingEnabled: parsed.prDraftingEnabled ?? DEFAULT_PREFS.prDraftingEnabled,
+    ciPollingEnabled: parsed.ciPollingEnabled ?? DEFAULT_PREFS.ciPollingEnabled,
+    localBuildMode: parsed.localBuildMode ?? DEFAULT_PREFS.localBuildMode,
+    cloudFallbackEnabled: parsed.cloudFallbackEnabled ?? DEFAULT_PREFS.cloudFallbackEnabled,
+    safeMode: parsed.safeMode ?? DEFAULT_PREFS.safeMode,
+    biometricProtectionEnabled:
+      parsed.biometricProtectionEnabled ?? DEFAULT_PREFS.biometricProtectionEnabled,
+    githubAccount: parsed.githubAccount ?? DEFAULT_PREFS.githubAccount,
   };
 };
 
@@ -136,6 +176,7 @@ const buildCredentialsView = (): Credentials => {
     github: {
       configured: Boolean(secrets.githubToken),
       masked: secrets.githubToken ? maskSecret(secrets.githubToken, 'GH') : 'Not connected',
+      account: prefs.githubAccount,
     },
   };
 };
@@ -204,9 +245,17 @@ export const storage = {
     return buildCredentialsView();
   },
 
+  saveGithubOAuth: (token: string, account: GithubAccount) => {
+    const current = readSecrets();
+    writeSecrets({ ...current, githubToken: token });
+    savePrefs({ githubAccount: account });
+    return buildCredentialsView();
+  },
+
   removeGithubToken: () => {
     const current = readSecrets();
     writeSecrets({ ...current, githubToken: undefined });
+    savePrefs({ githubAccount: null });
     return buildCredentialsView();
   },
 

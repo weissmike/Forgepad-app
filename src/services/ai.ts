@@ -186,7 +186,7 @@ export class AIService {
   async sendMessage<T = unknown>(messages: Message[], options: SendMessageOptions<T> = {}): Promise<SendMessageResult<T>> {
     const prefs = storage.getPreferences();
     const selectedProvider = options.provider ?? prefs.defaultProvider;
-    const fallbackEnabled = options.enableFallback ?? prefs.fallbackEnabled;
+    const fallbackEnabled = options.enableFallback ?? prefs.providerFallbackEnabled;
     const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
     const mergedMessages = options.systemPrompt

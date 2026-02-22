@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Shield, Key, Github, CheckCircle2, ArrowRight, Loader2, AlertCircle, Cpu, CircleDashed, XCircle } from 'lucide-react';
 import { storage, AIProvider, OnboardingStatus } from '../../services/storage';
@@ -86,6 +86,25 @@ export const Onboarding: React.FC<OnboardingProps> = ({ onComplete }) => {
 
   const sdkRequirementMet = !localBuildEnabled || sdkVerified;
   const allValidationsPass = requiredProviderValidated && secureStorageConsent && sdkRequirementMet;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('github_token');
+    const login = params.get('github_login');
+    const id = params.get('github_id');
+
+    if (!token || !login || !id) return;
+
+    storage.saveGithubOAuth(token, {
+      id,
+      login,
+      name: params.get('github_name') ?? login,
+      avatarUrl: params.get('github_avatar') ?? undefined,
+    });
+    setValidated((prev) => ({ ...prev, github: true }));
+  }, []);
 
   const handleValidate = async (provider: AIProvider) => {
     setLoadingProvider(provider);

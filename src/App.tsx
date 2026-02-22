@@ -3,6 +3,7 @@ import { Onboarding } from './components/onboarding/Onboarding';
 import { Workspace } from './components/workspace/Workspace';
 import { Settings } from './components/settings/Settings';
 import { storage } from './services/storage';
+import { RuntimeSessionProvider } from './state/runtimeSession';
 
 export default function App() {
   const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
@@ -20,9 +21,9 @@ export default function App() {
   }
 
   return (
-    <>
+    <RuntimeSessionProvider>
       <Workspace onOpenSettings={() => setShowSettings(true)} />
       {showSettings && <Settings onClose={() => setShowSettings(false)} />}
-    </>
+    </RuntimeSessionProvider>
   );
 }

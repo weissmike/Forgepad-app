@@ -20,6 +20,16 @@ export interface ProviderSwitchEvent {
 
 export type ErrorClass = 'timeout' | 'auth' | 'rate_limit' | 'network' | 'provider' | 'unknown';
 
+export interface ProviderHealthEvent {
+  provider: AIProvider;
+  health: 'healthy' | 'degraded' | 'error' | 'unconfigured';
+  detail?: string;
+}
+
+export type ProviderRuntimeEvent =
+  | { type: 'provider_switch'; from: AIProvider; to: AIProvider; reason: string }
+  | { type: 'provider_health'; provider: AIProvider; health: 'healthy' | 'degraded' | 'error' | 'unconfigured'; detail?: string };
+
 export interface StructuredParser<T> {
   parse: (raw: string) => T;
   validate?: (value: T) => boolean;
@@ -34,6 +44,7 @@ export interface SendMessageOptions<T = unknown> {
   onToolInvocation?: (event: ToolInvocationEvent) => void;
   onProviderSwitch?: (event: ProviderSwitchEvent) => void;
   onProviderEvent?: (event: string) => void;
+  onProviderHealth?: (event: ProviderHealthEvent) => void;
   structured?: StructuredParser<T>;
 }
 
@@ -169,6 +180,7 @@ class AnthropicAdapter implements ProviderAdapter {
 export class AIService {
   private static instance: AIService;
   private readonly adapters = new Map<AIProvider, ProviderAdapter>();
+  private readonly runtimeListeners = new Set<(event: ProviderRuntimeEvent) => void>();
 
   private constructor() {
     [new GeminiAdapter(), new OpenAIAdapter(), new AnthropicAdapter()].forEach((adapter) => {
@@ -181,6 +193,17 @@ export class AIService {
       AIService.instance = new AIService();
     }
     return AIService.instance;
+  }
+
+
+
+  subscribeRuntimeEvents(listener: (event: ProviderRuntimeEvent) => void) {
+    this.runtimeListeners.add(listener);
+    return () => this.runtimeListeners.delete(listener);
+  }
+
+  private emitRuntimeEvent(event: ProviderRuntimeEvent) {
+    this.runtimeListeners.forEach((listener) => listener(event));
   }
 
   async sendMessage<T = unknown>(messages: Message[], options: SendMessageOptions<T> = {}): Promise<SendMessageResult<T>> {
@@ -215,10 +238,14 @@ export class AIService {
         console.info('[AI fallback] provider switch', event);
         options.onProviderSwitch?.(event);
         options.onProviderEvent?.(`Switched from ${previous} to ${provider} (${event.reason}).`);
+        this.emitRuntimeEvent({ type: 'provider_switch', ...event });
       }
 
       try {
         const text = await withTimeout(adapter.complete(mergedMessages, options), timeoutMs, provider);
+        storage.saveProviderHealth(provider, 'healthy');
+        options.onProviderHealth?.({ provider, health: 'healthy' });
+        this.emitRuntimeEvent({ type: 'provider_health', provider, health: 'healthy' });
         const result: SendMessageResult<T> = {
           text,
           provider,
@@ -236,6 +263,10 @@ export class AIService {
         return result;
       } catch (error) {
         lastError = classifyError(provider, error);
+        const health = lastError.classification === 'auth' ? 'unconfigured' : 'error';
+        storage.saveProviderHealth(provider, health);
+        options.onProviderHealth?.({ provider, health, detail: lastError.message });
+        this.emitRuntimeEvent({ type: 'provider_health', provider, health, detail: lastError.message });
         const canFallback = fallbackEnabled && i < providersToTry.length - 1;
         if (!canFallback) {
           throw lastError;
